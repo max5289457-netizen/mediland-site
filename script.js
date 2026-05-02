@@ -50,17 +50,23 @@ document.getElementById('registrationForm').addEventListener('submit', function(
         }
     }
 
+    // Создание FormData для отправки файлов
+    const formData = new FormData();
+    formData.append('fullName', fullName);
+    formData.append('branch', branch);
+    formData.append('birthDate', birthDate);
+    formData.append('phone', phone);
+    formData.append('email', email);
+    formData.append('rehabType', rehabType);
+    formData.append('message', message);
+
+    // Добавление фотографий
+    for (let i = 0; i < photosInput.files.length; i++) {
+        formData.append('photos', photosInput.files[i]);
+    }
+
     // Отправка на сервер бота
-    sendToBotServer({
-        fullName,
-        branch,
-        birthDate,
-        phone,
-        email,
-        rehabType,
-        message,
-        photosCount: photosInput.files.length
-    })
+    sendToBotServer(formData)
         .then(result => {
             if (result.ok) {
                 if (result.queued) {
@@ -79,13 +85,10 @@ document.getElementById('registrationForm').addEventListener('submit', function(
         });
 });
 
-function sendToBotServer(data) {
+function sendToBotServer(formData) {
     return fetch(BOT_SERVER_URL, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
+        body: formData
     })
     .then(response => response.json())
     .then(result => {

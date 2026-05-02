@@ -12,27 +12,51 @@ function localFilePath(filename) {
   return path.resolve(process.cwd(), filename);
 }
 
-export async function parseJsonBody(req) {
-  if (req.body) {
-    return req.body;
+export async function parseFormData(req) {
+  const contentType = req.headers['content-type'] || '';
+  
+  // Если это JSON, парсим как обычно
+  if (contentType.includes('application/json')) {
+    return parseJsonBody(req);
   }
 
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
+  // Если это FormData с файлами
+  if (contentType.includes('multipart/form-data')) {
+    const Busboy = (await import('busboy')).default;
+    const busboy = Busboy({ headers: req.headers });
+    
+    const fields = {};
+    const files = [];
+
+    return new Promise((resolve, reject) => {
+      busboy.on('file', (fieldname, file, info) => {
+        const chunks = [];
+        file.on('data', chunk => chunks.push(chunk));
+        file.on('end', () => {
+          files.push({
+            fieldname,
+            buffer: Buffer.concat(chunks),
+            filename: info.filename,
+            mimetype: info.encoding
+          });
+        });
+      });
+
+      busboy.on('field', (fieldname, val) => {
+        fields[fieldname] = val;
+      });
+
+      busboy.on('error', reject);
+      busboy.on('finish', () => {
+        resolve({ ...fields, files });
+      });
+
+      req.pipe(busboy);
+    });
   }
 
-  const rawBody = Buffer.concat(chunks).toString('utf-8');
-  if (!rawBody) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(rawBody);
-  } catch (error) {
-    console.error('Failed to parse JSON body:', error.message);
-    return {};
-  }
+  // Если это обычные данные, парсим как JSON
+  return parseJsonBody(req);
 }
 
 function escapeHtml(text) {
@@ -149,6 +173,32 @@ export async function sendTelegramMessage(chatId, text, options = {}) {
   const result = await response.json();
   if (!result.ok) {
     throw new Error(result.description || 'Telegram sendMessage failed');
+  }
+
+  return result;
+}
+
+export async function sendTelegramPhoto(chatId, photoBuffer, filename = 'photo.jpg') {
+  if (!TELEGRAM_BOT_TOKEN) {
+    throw new Error('TELEGRAM_BOT_TOKEN is not set');
+  }
+  if (!chatId) {
+    throw new Error('Telegram chatId is missing');
+  }
+
+  const FormData = (await import('form-data')).default;
+  const form = new FormData();
+  form.append('chat_id', chatId);
+  form.append('photo', photoBuffer, filename);
+
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+    method: 'POST',
+    body: form
+  });
+
+  const result = await response.json();
+  if (!result.ok) {
+    throw new Error(result.description || 'Telegram sendPhoto failed');
   }
 
   return result;

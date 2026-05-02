@@ -1,4 +1,4 @@
-import { loadJson, saveJson, sendTelegramMessage, getWebhookUrl, parseJsonBody } from './utils.js';
+import { loadJson, saveJson, sendTelegramMessage, sendTelegramPhoto, getWebhookUrl, parseJsonBody } from './utils.js';
 
 const HELP_TEXT = 'Привет! Я бот для сотрудников Медиленд.\n\n' +
   'Я принимаю заявки с сайта и отправляю их сотруднику, который сейчас на смене.\n' +
@@ -13,6 +13,33 @@ const HELP_TEXT = 'Привет! Я бот для сотрудников Мед�
 
 function normalizeText(text) {
   return String(text || '').trim();
+}
+
+async function sendPendingNotifications(chatId, pending) {
+  let sentCount = 0;
+  for (const notification of pending) {
+    try {
+      // Отправка текстового сообщения
+      await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
+      sentCount++;
+      
+      // Отправка фотографий если они есть
+      if (notification.files && notification.files.length > 0) {
+        for (const file of notification.files) {
+          try {
+            // Восстанавливаем Buffer из сохраненных данных
+            const photoBuffer = Buffer.from(file.buffer.data || file.buffer);
+            await sendTelegramPhoto(chatId, photoBuffer, file.filename);
+          } catch (photoError) {
+            console.error(`Failed to send photo from pending:`, photoError.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка отправки pending notification:', error.message);
+    }
+  }
+  return sentCount;
 }
 
 export default async function handler(req, res) {
@@ -115,16 +142,10 @@ export default async function handler(req, res) {
 
     if (pending.length > 0) {
       const pendingCount = pending.length;
-      for (const notification of pending) {
-        try {
-          await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
-        } catch (error) {
-          console.error('Ошибка отправки pending notification:', error.message);
-        }
-      }
+      const sentCount = await sendPendingNotifications(chatId, pending);
       pending.length = 0;
       await saveJson('pending_notifications.json', pending);
-      await reply(`✅ Вы вошли как ${employeeName}. Отправлено ${pendingCount} накопленных заявок.`);
+      await reply(`✅ Вы вошли как ${employeeName}. Отправлено ${sentCount} накопленных заявок.`);
       return res.status(200).json({ ok: true });
     }
 
@@ -142,16 +163,10 @@ export default async function handler(req, res) {
     await saveJson('subscribers.json', subscribers);
 
     if (pending.length > 0) {
-      for (const notification of pending) {
-        try {
-          await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
-        } catch (error) {
-          console.error('Ошибка отправки pending notification:', error.message);
-        }
-      }
+      const sentCount = await sendPendingNotifications(chatId, pending);
       pending.length = 0;
       await saveJson('pending_notifications.json', pending);
-      await reply(`✅ Вы начали смену. Отправлено ${pending.length} накопленных заявок.`);
+      await reply(`✅ Вы начали смену. Отправлено ${sentCount} накопленных заявок.`);
       return res.status(200).json({ ok: true });
     }
 

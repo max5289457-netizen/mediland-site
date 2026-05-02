@@ -110,6 +110,13 @@ header {
     border-radius: 18px;
     padding: 24px;
     box-shadow: 0 12px 30px rgba(184, 64, 97, 0.06);
+    transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.branch-card:hover {
+    background-color: #fde8ed;
+    border-color: #b71f3d;
+    box-shadow: 0 16px 40px rgba(183, 31, 61, 0.15);
 }
 
 .branch-card h3 {
