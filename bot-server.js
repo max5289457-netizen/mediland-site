@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
 import TelegramBot from 'node-telegram-bot-api';
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_BOT_TOKEN = '8718577612:AAFUxzamY_W-r4vsgXmWQLWBggvSzp9TVNA';
 if (!TELEGRAM_BOT_TOKEN) {
   console.error('ERROR: TELEGRAM_BOT_TOKEN environment variable is required.');
   process.exit(1);
