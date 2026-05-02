@@ -3,7 +3,7 @@
     "chatId": 499201139,
     "employeeName": "Саша",
     "employeePassword": "1234",
-    "onShift": false,
+    "onShift": true,
     "createdAt": "2026-05-02T20:10:38.166Z"
   },
   {
