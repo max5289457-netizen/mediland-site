@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (onShift.length > 0) {
     const results = await Promise.all(onShift.map(async (subscriber) => {
       try {
-        await sendTelegramMessage(subscriber.chatId, messageText);
+        await sendTelegramMessage(subscriber.chatId, messageText, { skipEscape: true });
         return { chatId: subscriber.chatId, ok: true };
       } catch (error) {
         return { chatId: subscriber.chatId, ok: false, error: error.message };

@@ -1,6 +1,8 @@
 import { loadJson, saveJson, sendTelegramMessage, getWebhookUrl, parseJsonBody } from './utils.js';
 
 const HELP_TEXT = 'Привет! Я бот для сотрудников Медиленд.\n\n' +
+  'Я принимаю заявки с сайта и отправляю их сотруднику, который сейчас на смене.\n' +
+  'Если никто не на смене, я сохраню заявку и пришлю её, когда смена начнётся.\n\n' +
   'Команды:\n' +
   '/регистрация пароль имя — создать аккаунт\n' +
   '/войти имя пароль — войти и начать смену\n' +
@@ -115,7 +117,7 @@ export default async function handler(req, res) {
       const pendingCount = pending.length;
       for (const notification of pending) {
         try {
-          await sendTelegramMessage(chatId, notification.message);
+          await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
         } catch (error) {
           console.error('Ошибка отправки pending notification:', error.message);
         }
@@ -142,7 +144,7 @@ export default async function handler(req, res) {
     if (pending.length > 0) {
       for (const notification of pending) {
         try {
-          await sendTelegramMessage(chatId, notification.message);
+          await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
         } catch (error) {
           console.error('Ошибка отправки pending notification:', error.message);
         }

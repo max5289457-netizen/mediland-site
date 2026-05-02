@@ -44,6 +44,11 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+function escapeTelegramHtml(text) {
+  return escapeHtml(text)
+    .replace(/\n/g, '\n');
+}
+
 async function githubRequest(url, options = {}) {
   const headers = {
     Accept: 'application/vnd.github+json',
@@ -119,19 +124,26 @@ export async function sendTelegramMessage(chatId, text, options = {}) {
   if (!TELEGRAM_BOT_TOKEN) {
     throw new Error('TELEGRAM_BOT_TOKEN is not set');
   }
+  if (!chatId) {
+    throw new Error('Telegram chatId is missing');
+  }
+
+  const messageText = options.skipEscape ? text : escapeTelegramHtml(text);
+  const body = {
+    chat_id: chatId,
+    text: messageText,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    ...options
+  };
+  delete body.skipEscape;
 
   const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      ...options
-    })
+    body: JSON.stringify(body)
   });
 
   const result = await response.json();
