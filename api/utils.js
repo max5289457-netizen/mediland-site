@@ -12,6 +12,29 @@ function localFilePath(filename) {
   return path.resolve(process.cwd(), filename);
 }
 
+export async function parseJsonBody(req) {
+  if (req.body) {
+    return req.body;
+  }
+
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+
+  const rawBody = Buffer.concat(chunks).toString('utf-8');
+  if (!rawBody) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawBody);
+  } catch (error) {
+    console.error('Failed to parse JSON body:', error.message);
+    return {};
+  }
+}
+
 function escapeHtml(text) {
   return String(text)
     .replace(/&/g, '&amp;')

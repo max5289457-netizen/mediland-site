@@ -1,4 +1,4 @@
-import { loadJson, saveJson, sendTelegramMessage, getWebhookUrl } from './utils.js';
+import { loadJson, saveJson, sendTelegramMessage, getWebhookUrl, parseJsonBody } from './utils.js';
 
 const HELP_TEXT = 'Привет! Я бот для сотрудников Медиленд.\n\n' +
   'Команды:\n' +
@@ -14,36 +14,37 @@ function normalizeText(text) {
 }
 
 export default async function handler(req, res) {
-  if (req.method === 'GET') {
-    if (req.query?.setup === '1') {
-      const webhookUrl = getWebhookUrl(req);
-      const token = process.env.TELEGRAM_BOT_TOKEN;
-      if (!token) {
-        return res.status(500).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' });
+  try {
+    if (req.method === 'GET') {
+      if (req.query?.setup === '1') {
+        const webhookUrl = getWebhookUrl(req);
+        const token = process.env.TELEGRAM_BOT_TOKEN;
+        if (!token) {
+          return res.status(500).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' });
+        }
+        const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: webhookUrl })
+        });
+        const result = await response.json();
+        return res.status(result.ok ? 200 : 500).json(result);
       }
-      const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: webhookUrl })
-      });
-      const result = await response.json();
-      return res.status(result.ok ? 200 : 500).json(result);
+      return res.status(200).send('Telegram webhook endpoint');
     }
-    return res.status(200).send('Telegram webhook endpoint');
-  }
 
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST', 'GET']);
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
-  }
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', ['POST', 'GET']);
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    }
 
-  const body = req.body;
-  const message = body.message || body.edited_message;
-  if (!message) {
-    return res.status(200).json({ ok: true });
-  }
+    const body = await parseJsonBody(req);
+    const message = body?.message || body?.edited_message;
+    if (!message) {
+      return res.status(200).json({ ok: true });
+    }
 
-  const chatId = message.chat.id;
+    const chatId = message.chat.id;
   const text = normalizeText(message.text || '');
   const subscribers = await loadJson('subscribers.json');
   const pending = await loadJson('pending_notifications.json');
@@ -188,4 +189,8 @@ export default async function handler(req, res) {
 
   await reply(HELP_TEXT);
   return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Telegram webhook handler error:', error);
+    return res.status(500).json({ ok: false, error: error.message || 'Internal server error' });
+  }
 }

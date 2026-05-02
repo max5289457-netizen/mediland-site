@@ -1,13 +1,14 @@
-import { loadJson, saveJson, buildNotificationMessage, sendTelegramMessage } from './utils.js';
+import { loadJson, saveJson, buildNotificationMessage, sendTelegramMessage, parseJsonBody } from './utils.js';
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
-  }
+  try {
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', ['POST']);
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    }
 
-  const data = req.body;
-  const subscribers = await loadJson('subscribers.json');
+    const data = await parseJsonBody(req);
+    const subscribers = await loadJson('subscribers.json');
   const onShift = subscribers.filter(sub => sub.onShift);
   const messageText = buildNotificationMessage(data);
 
@@ -28,4 +29,8 @@ export default async function handler(req, res) {
   pending.push({ message: messageText, timestamp: new Date().toISOString() });
   await saveJson('pending_notifications.json', pending);
   return res.status(200).json({ ok: true, queued: true, message: 'Никто не на смене. Заявка сохранена и будет отправлена при начале смены.' });
+  } catch (error) {
+    console.error('Notify handler error:', error);
+    return res.status(500).json({ ok: false, error: error.message || 'Internal server error' });
+  }
 }
