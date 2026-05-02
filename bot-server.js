@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import cors from 'cors';
+import Busboy from 'busboy';
 import TelegramBot from 'node-telegram-bot-api';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -38,6 +40,121 @@ function loadPendingNotifications() {
 
 function savePendingNotifications(pending) {
   fs.writeFileSync(PENDING_FILE, JSON.stringify(pending, null, 2), 'utf-8');
+}
+
+function cleanupTempFiles(paths) {
+  for (const filePath of paths) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (error) {
+      // ignore cleanup errors
+    }
+  }
+}
+
+function parseNotificationRequest(req) {
+  return new Promise((resolve, reject) => {
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.startsWith('multipart/form-data')) {
+      return resolve({ fields: req.body || {}, photos: [] });
+    }
+
+    const busboy = new Busboy({ headers: req.headers });
+    const fields = {};
+    const photos = [];
+    let pendingWrites = 0;
+    let finished = false;
+
+    const tryFinish = () => {
+      if (finished && pendingWrites === 0) {
+        resolve({ fields, photos });
+      }
+    };
+
+    busboy.on('field', (fieldname, val) => {
+      fields[fieldname] = val;
+    });
+
+    busboy.on('file', (fieldname, file, filename, encoding, mimetype) => {
+      if (fieldname !== 'photos') {
+        file.resume();
+        return;
+      }
+
+      pendingWrites += 1;
+      const tempPath = path.join(os.tmpdir(), `mediland-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`);
+      const writeStream = fs.createWriteStream(tempPath);
+      file.pipe(writeStream);
+
+      writeStream.on('finish', () => {
+        photos.push({ filename, contentType: mimetype, tempPath });
+        pendingWrites -= 1;
+        tryFinish();
+      });
+
+      writeStream.on('error', (error) => {
+        pendingWrites -= 1;
+        reject(error);
+      });
+    });
+
+    busboy.on('finish', () => {
+      finished = true;
+      tryFinish();
+    });
+
+    busboy.on('error', reject);
+    req.pipe(busboy);
+  });
+}
+
+function buildPhotoCaption(photoCount) {
+  if (!photoCount) return '';
+  return `
+<b>📷 Фото:</b> ${photoCount} шт.`;
+}
+
+function savePendingPhotos(photos) {
+  return photos.map((photo) => ({
+    filename: photo.filename,
+    contentType: photo.contentType,
+    base64: fs.readFileSync(photo.tempPath, { encoding: 'base64' })
+  }));
+}
+
+function buildPhotoSource(photo, tempFiles) {
+  if (photo.tempPath && fs.existsSync(photo.tempPath)) {
+    return fs.createReadStream(photo.tempPath);
+  }
+
+  const tempPath = path.join(os.tmpdir(), `mediland-send-${Date.now()}-${Math.random().toString(36).slice(2)}-${photo.filename}`);
+  fs.writeFileSync(tempPath, photo.base64, 'base64');
+  tempFiles.push(tempPath);
+  return fs.createReadStream(tempPath);
+}
+
+async function sendPhotos(chatId, photos) {
+  if (!photos || photos.length === 0) return;
+
+  const tempFiles = [];
+  try {
+    if (photos.length === 1) {
+      const photo = photos[0];
+      const source = buildPhotoSource(photo, tempFiles);
+      await bot.sendPhoto(chatId, source, { caption: '📷 Фото пациента' });
+      return;
+    }
+
+    const media = photos.map((photo) => ({
+      type: 'photo',
+      media: buildPhotoSource(photo, tempFiles),
+      filename: photo.filename
+    }));
+
+    await bot.sendMediaGroup(chatId, media);
+  } finally {
+    cleanupTempFiles(tempFiles);
+  }
 }
 
 function findSubscriber(chatId) {
@@ -180,6 +297,9 @@ bot.onText(/\/войти(?:\s+(\S+))?(?:\s+(\S+))?/, async (msg, match) => {
     for (const notification of pending) {
       try {
         await bot.sendMessage(chatId, notification.message, { parse_mode: 'HTML' });
+        if (notification.photos && notification.photos.length > 0) {
+          await sendPhotos(chatId, notification.photos);
+        }
       } catch (error) {
         console.error('Ошибка отправки pending notification:', error);
       }
@@ -222,17 +342,18 @@ bot.onText(/\/начать_смену/, async (msg) => {
   subscriber.onShift = true;
   saveSubscribers(list);
 
-  // Отправить все pending notifications
   const pending = loadPendingNotifications();
   if (pending.length > 0) {
     for (const notification of pending) {
       try {
         await bot.sendMessage(chatId, notification.message, { parse_mode: 'HTML' });
+        if (notification.photos && notification.photos.length > 0) {
+          await sendPhotos(chatId, notification.photos);
+        }
       } catch (error) {
         console.error('Ошибка отправки pending notification:', error);
       }
     }
-    // Очистить очередь
     savePendingNotifications([]);
     await bot.sendMessage(chatId, `✅ Вы начали смену. Отправлено ${pending.length} накопленных заявок.`, buildBotKeyboard());
   } else {
@@ -284,30 +405,40 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/notify', async (req, res) => {
-  const payload = req.body;
-  const subscribers = loadSubscribers().filter(sub => sub.onShift);
+  try {
+    const { fields, photos } = await parseNotificationRequest(req);
+    fields.photosCount = photos.length;
+    const subscribers = loadSubscribers().filter(sub => sub.onShift);
 
-  const messageText = buildNotificationMessage(payload);
+    const messageText = buildNotificationMessage(fields);
 
-  if (subscribers.length > 0) {
-    // Отправить сотрудникам на смене
-    const results = await Promise.all(subscribers.map(async (subscriber) => {
-      try {
-        await bot.sendMessage(subscriber.chatId, messageText, { parse_mode: 'HTML' });
-        return { chatId: subscriber.chatId, ok: true };
-      } catch (error) {
-        return { chatId: subscriber.chatId, ok: false, error: error.message };
-      }
-    }));
+    if (subscribers.length > 0) {
+      const results = await Promise.all(subscribers.map(async (subscriber) => {
+        try {
+          await bot.sendMessage(subscriber.chatId, messageText, { parse_mode: 'HTML' });
+          if (photos.length > 0) {
+            const pendingPhotos = savePendingPhotos(photos);
+            await sendPhotos(subscriber.chatId, pendingPhotos);
+          }
+          return { chatId: subscriber.chatId, ok: true };
+        } catch (error) {
+          return { chatId: subscriber.chatId, ok: false, error: error.message };
+        }
+      }));
 
-    const successCount = results.filter(r => r.ok).length;
-    res.json({ ok: true, sent: successCount, total: subscribers.length, results });
-  } else {
-    // Сохранить в pending
-    const pending = loadPendingNotifications();
-    pending.push({ message: messageText, timestamp: new Date().toISOString() });
-    savePendingNotifications(pending);
-    res.json({ ok: true, queued: true, message: 'Заявка сохранена в очередь. Будет отправлена сотруднику при начале смены.' });
+      const successCount = results.filter(r => r.ok).length;
+      res.json({ ok: true, sent: successCount, total: subscribers.length, results });
+    } else {
+      const pending = loadPendingNotifications();
+      pending.push({ message: messageText, timestamp: new Date().toISOString(), photos: savePendingPhotos(photos) });
+      savePendingNotifications(pending);
+      res.json({ ok: true, queued: true, message: 'Заявка сохранена в очередь. Будет отправлена сотруднику при начале смены.' });
+    }
+
+    cleanupTempFiles(photos.map(photo => photo.tempPath));
+  } catch (error) {
+    console.error('Ошибка обработки запроса /notify:', error);
+    res.status(500).json({ ok: false, error: 'Ошибка обработки формы. Попробуйте ещё раз.' });
   }
 });
 
