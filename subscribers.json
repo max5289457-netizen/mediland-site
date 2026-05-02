@@ -12,5 +12,12 @@
     "employeePassword": "1234",
     "onShift": false,
     "createdAt": "2026-05-02T20:10:38.166Z"
+  },
+  {
+    "chatId": 6459834298,
+    "employeeName": "Ева",
+    "employeePassword": "1234",
+    "onShift": false,
+    "createdAt": "2026-05-02T20:11:12.662Z"
   }
 ]
