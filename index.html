@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация пациентов - Медиленд</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <div class="container header-inner">
+            <div class="brand">
+                <img src="images/logo.png" alt="Медиленд">
+                <div>
+                    <h1>Медиленд</h1>
+                    <p>Реабилитационный центр</p>
+                </div>
+            </div>
+            <div class="header-contacts">
+                <p class="contacts-label">Наши контакты</p>
+                <a href="tel:+996550911353">+996 550‒91‒13‒53</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="container">
+                <h2>Регистрация пациента</h2>
+                <p>Оставьте заявку для первичной регистрации в реабилитационный центр "Медиленд". Наши специалисты свяжутся с вами для уточнения деталей.</p>
+            </div>
+        </section>
+
+        <section class="branches">
+            <div class="container">
+                <h2>Наши филиалы</h2>
+                <div class="branches-grid">
+                    <div class="branch-card" data-branch="Медиленд Центральный">
+                        <h3>Медиленд Центральный</h3>
+                        <p>Улица Айни, 20/1</p>
+                        <p>Первомайский район, Бишкек, 720044</p>
+                        <p>Телефон: <a href="tel:+996550911353">+996 550‒91‒13‒53</a></p>
+                        <button type="button" class="btn btn-branch-select" data-branch="Медиленд Центральный">Выбрать этот филиал</button>
+                    </div>
+                    <div class="branch-card" data-branch="Медиленд Городок Строителей">
+                        <h3>Медиленд Городок Строителей</h3>
+                        <p>Квартал Городок Строителей, 9/2</p>
+                        <p>1 этаж</p>
+                        <p>Телефон: <a href="tel:+996550911353">+996 550‒91‒13‒53</a></p>
+                        <button type="button" class="btn btn-branch-select" data-branch="Медиленд Городок Строителей">Выбрать этот филиал</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="registration">
+            <div class="container">
+                <form id="registrationForm">
+                    <div class="form-group">
+                        <label for="fullName">ФИО</label>
+                        <input type="text" id="fullName" name="fullName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="branchName">Выбранный филиал</label>
+                        <input type="text" id="branchName" name="branchName" readonly placeholder="Выберите филиал выше" required>
+                        <input type="hidden" id="branch" name="branch">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="birthDate">Дата рождения</label>
+                            <input type="date" id="birthDate" name="birthDate" required>
+                        </div>
+                        <div class="form-group half-width">
+                            <label for="phone">Телефон</label>
+                            <input type="tel" id="phone" name="phone" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="form-group half-width">
+                            <label for="rehabType">Тип реабилитации</label>
+                            <select id="rehabType" name="rehabType" required>
+                                <option value="">Выберите тип</option>
+                                <option value="physical">Физическая реабилитация</option>
+                                <option value="neurological">Неврологическая реабилитация</option>
+                                <option value="cardiac">Кардиологическая реабилитация</option>
+                                <option value="orthopedic">Ортопедическая реабилитация</option>
+                                <option value="other">Другое</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="photos">Фотографии (по желанию)</label>
+                        <input type="file" id="photos" name="photos" accept="image/*" multiple>
+                    </div>
+                    <div class="form-group">
+                        <label for="message">Дополнительная информация</label>
+                        <textarea id="message" name="message" rows="5" placeholder="Например: особенности здоровья, предпочтения по времени сеансов и т.д."></textarea>
+                    </div>
+                    <button type="submit" class="btn">Зарегистрироваться</button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container footer-inner">
+            <p>&copy; 2026 Медиленд. Все права защищены.</p>
+            <p>Адрес: Бишкек, Кыргызстан</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
