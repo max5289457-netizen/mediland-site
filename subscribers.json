@@ -17,7 +17,7 @@
     "chatId": 763637481,
     "employeeName": "Макс",
     "employeePassword": "1234",
-    "onShift": false,
+    "onShift": true,
     "createdAt": "2026-05-02T20:37:03.830Z"
   }
 ]
