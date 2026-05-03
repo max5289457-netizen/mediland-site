@@ -24,7 +24,7 @@
     "chatId": 302113289,
     "employeeName": "Настя",
     "employeePassword": "1234",
-    "onShift": true,
+    "onShift": false,
     "createdAt": "2026-05-03T13:04:23.725Z"
   }
 ]
