@@ -6,7 +6,8 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_OWNER = process.env.VERCEL_GIT_REPO_OWNER || process.env.GITHUB_OWNER;
 const GITHUB_REPO = process.env.VERCEL_GIT_REPO_SLUG || process.env.GITHUB_REPO;
-const useGitHubStorage = Boolean(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO);
+// Временно отключаем GitHub storage для отладки
+const useGitHubStorage = false; // Boolean(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO);
 
 function localFilePath(filename) {
   return path.resolve(process.cwd(), filename);
@@ -161,8 +162,10 @@ export async function saveJson(filename, data) {
     return await response.json();
   }
 
+  // Для Vercel без GitHub storage используем временное хранение в памяти
   if (process.env.VERCEL) {
-    throw new Error('Persistent storage on Vercel requires GITHUB_TOKEN and repo info.');
+    console.warn(`Vercel detected but GitHub storage disabled. ${filename} changes will not persist.`);
+    return { ok: true };
   }
 
   fs.writeFileSync(localFilePath(filename), JSON.stringify(data, null, 2), 'utf-8');
