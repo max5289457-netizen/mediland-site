@@ -13,10 +13,12 @@ function localFilePath(filename) {
 }
 
 export async function parseJsonBody(req) {
+  // Vercel может уже распарсить тело
   if (req.body) {
     return req.body;
   }
 
+  // Для других сред читаем поток
   const chunks = [];
   for await (const chunk of req) {
     chunks.push(chunk);

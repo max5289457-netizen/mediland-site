@@ -44,6 +44,8 @@ async function sendPendingNotifications(chatId, pending) {
 
 export default async function handler(req, res) {
   try {
+    console.log('Telegram webhook received:', req.method, req.url);
+
     if (req.method === 'GET') {
       if (req.query?.setup === '1') {
         const webhookUrl = getWebhookUrl(req);
@@ -68,8 +70,11 @@ export default async function handler(req, res) {
     }
 
     const body = await parseJsonBody(req);
+    console.log('Parsed body:', JSON.stringify(body, null, 2));
+
     const message = body?.message || body?.edited_message;
     if (!message) {
+      console.log('No message in body');
       return res.status(200).json({ ok: true });
     }
 
