@@ -6,8 +6,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_OWNER = process.env.VERCEL_GIT_REPO_OWNER || process.env.GITHUB_OWNER;
 const GITHUB_REPO = process.env.VERCEL_GIT_REPO_SLUG || process.env.GITHUB_REPO;
-// Временно отключаем GitHub storage для отладки
-const useGitHubStorage = false; // Boolean(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO);
+const useGitHubStorage = Boolean(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO);
 
 function localFilePath(filename) {
   return path.resolve(process.cwd(), filename);
@@ -63,7 +62,7 @@ export async function parseFormData(req) {
             fieldname,
             buffer: Buffer.concat(chunks),
             filename: info.filename,
-            mimetype: info.encoding
+            mimetype: info.mimeType || info.mimetype || 'application/octet-stream'
           });
         });
       });
@@ -241,7 +240,8 @@ export function buildNotificationMessage(data) {
   if (data.branch) text += `<b>🏢 Филиал:</b> ${escapeHtml(data.branch)}\n`;
   if (data.rehabType) text += `<b>🏥 Тип реабилитации:</b> ${escapeHtml(data.rehabType)}\n`;
   if (data.message) text += `\n<b>📝 Сообщение:</b>\n${escapeHtml(data.message)}\n`;
-  if (data.photosCount != null) text += `<b>📎 Фото:</b> ${escapeHtml(data.photosCount)} шт.\n`;
+  const photoCount = Number(data.photosCount || (Array.isArray(data.files) ? data.files.length : 0));
+  if (photoCount > 0) text += `<b>📎 Фото:</b> ${escapeHtml(photoCount)} шт.\n`;
   text += `\n<b>⏰ Время:</b> ${new Date().toLocaleString('ru-RU')}`;
   return text;
 }
