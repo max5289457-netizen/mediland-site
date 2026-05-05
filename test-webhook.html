@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Telegram Webhook</title>
+</head>
+<body>
+    <h1>Testing Telegram Webhook</h1>
+    <button onclick="testWebhook()">Test Webhook</button>
+    <button onclick="setupWebhook()">Setup Webhook</button>
+    <div id="result"></div>
+
+    <script>
+        async function testWebhook() {
+            try {
+                const response = await fetch('/api/telegram');
+                const result = await response.json();
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('result').innerHTML = 'Error: ' + error.message;
+            }
+        }
+
+        async function setupWebhook() {
+            try {
+                const response = await fetch('/api/telegram?setup=1');
+                const result = await response.json();
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+            } catch (error) {
+                document.getElementById('result').innerHTML = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
