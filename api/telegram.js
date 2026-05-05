@@ -69,9 +69,49 @@ export default async function handler(req, res) {
       return res.status(405).json({ ok: false, error: 'Method not allowed' });
     }
 
-    // Простой тест - возвращаем OK для любого POST
-    console.log('Received POST request to webhook');
+    // Проверяем, что токен установлен
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      console.error('TELEGRAM_BOT_TOKEN not set');
+      return res.status(500).json({ ok: false, error: 'Bot token not configured' });
+    }
+
+    const body = await parseJsonBody(req);
+    console.log('Parsed body:', JSON.stringify(body, null, 2));
+
+    const message = body?.message || body?.edited_message;
+    if (!message) {
+      console.log('No message in body');
+      return res.status(200).json({ ok: true });
+    }
+
+    const chatId = message.chat.id;
+    const text = normalizeText(message.text || '');
+
+    console.log('Processing message:', { chatId, text });
+
+    const reply = async (textReply) => {
+      try {
+        await sendTelegramMessage(chatId, textReply);
+        console.log('Reply sent successfully');
+      } catch (error) {
+        console.error('Failed to send reply:', error);
+      }
+    };
+
+    if (text.startsWith('/start')) {
+      await reply(HELP_TEXT);
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text.startsWith('/test')) {
+      await reply('✅ Бот работает! Получено тестовое сообщение.');
+      return res.status(200).json({ ok: true });
+    }
+
+    // Для всех остальных сообщений просто подтверждаем получение
+    console.log('Message processed successfully');
     return res.status(200).json({ ok: true });
+
   } catch (error) {
     console.error('Webhook error:', error);
     return res.status(500).json({ ok: false, error: error.message });
