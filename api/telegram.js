@@ -89,6 +89,9 @@ export default async function handler(req, res) {
 
     console.log('Processing message:', { chatId, text });
 
+    const subscribers = await loadJson('subscribers.json');
+    const pending = await loadJson('pending_notifications.json');
+
     const reply = async (textReply) => {
       try {
         await sendTelegramMessage(chatId, textReply);
@@ -108,8 +111,130 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // Для всех остальных сообщений просто подтверждаем получение
-    console.log('Message processed successfully');
+    const registrationMatch = text.match(/^\/(?:employee|register|регистрация)\s+(\S+)\s+(.+)$/i);
+    const loginMatch = text.match(/^\/войти\s+(.+)\s+(\S+)$/i);
+
+    if (registrationMatch) {
+      const employeePassword = registrationMatch[1].trim();
+      const employeeName = registrationMatch[2].trim();
+
+      const existingByName = subscribers.find(item => item.employeeName && item.employeeName.toLowerCase() === employeeName.toLowerCase());
+      const existingByChat = subscribers.find(item => item.chatId === chatId);
+
+      if (existingByName && existingByName.chatId !== chatId) {
+        await reply('❌ Сотрудник с таким именем уже зарегистрирован. Выберите другое имя.');
+        return res.status(200).json({ ok: true });
+      }
+
+      if (existingByChat) {
+        existingByChat.employeeName = employeeName;
+        existingByChat.employeePassword = employeePassword;
+        existingByChat.chatId = chatId;
+      } else {
+        subscribers.push({
+          chatId,
+          employeeName,
+          employeePassword,
+          onShift: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      await saveJson('subscribers.json', subscribers);
+      await reply(`✅ Вы зарегистрированы как сотрудник!\nИмя в системе: ${employeeName}`);
+      return res.status(200).json({ ok: true });
+    }
+
+    if (loginMatch) {
+      const employeeName = loginMatch[1].trim();
+      const employeePassword = loginMatch[2].trim();
+      const subscriber = subscribers.find(item => item.employeeName && item.employeeName.toLowerCase() === employeeName.toLowerCase());
+
+      if (!subscriber) {
+        await reply(`❌ Пользователь «${employeeName}» не найден. Зарегистрируйтесь командой /регистрация <пароль> <имя>.`);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (subscriber.employeePassword !== employeePassword) {
+        await reply('❌ Неверный пароль. Попробуйте снова.');
+        return res.status(200).json({ ok: true });
+      }
+
+      subscriber.chatId = chatId;
+      subscriber.onShift = true;
+      await saveJson('subscribers.json', subscribers);
+
+      if (pending.length > 0) {
+        const pendingCount = pending.length;
+        const sentCount = await sendPendingNotifications(chatId, pending);
+        pending.length = 0;
+        await saveJson('pending_notifications.json', pending);
+        await reply(`✅ Вы вошли как ${employeeName}. Отправлено ${sentCount} накопленных заявок.`);
+        return res.status(200).json({ ok: true });
+      }
+
+      await reply(`✅ Вы вошли как ${employeeName} и теперь на смене.`);
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '/начать_смену') {
+      const subscriber = subscribers.find(item => item.chatId === chatId);
+      if (!subscriber) {
+        await reply('⚠️ Вы ещё не зарегистрированы. Отправьте /регистрация <пароль> <имя>.');
+        return res.status(200).json({ ok: true });
+      }
+      subscriber.onShift = true;
+      await saveJson('subscribers.json', subscribers);
+
+      if (pending.length > 0) {
+        const sentCount = await sendPendingNotifications(chatId, pending);
+        pending.length = 0;
+        await saveJson('pending_notifications.json', pending);
+        await reply(`✅ Вы начали смену. Отправлено ${sentCount} накопленных заявок.`);
+        return res.status(200).json({ ok: true });
+      }
+
+      await reply('✅ Вы начали смену. Теперь вы будете получать уведомления.');
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '/закончить_смену') {
+      const subscriber = subscribers.find(item => item.chatId === chatId);
+      if (!subscriber) {
+        await reply('⚠️ Вы ещё не зарегистрированы. Отправьте /регистрация <пароль> <имя>.');
+        return res.status(200).json({ ok: true });
+      }
+      subscriber.onShift = false;
+      await saveJson('subscribers.json', subscribers);
+      await reply('✅ Вы закончили смену. Уведомления отключены.');
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '/статус') {
+      const subscriber = subscribers.find(item => item.chatId === chatId);
+      if (!subscriber) {
+        await reply('⚠️ Вы ещё не зарегистрированы. Отправьте /регистрация <пароль> <имя>.');
+        return res.status(200).json({ ok: true });
+      }
+      const status = subscriber.onShift ? 'На смене' : 'Не на смене';
+      await reply(`✅ Статус:\nИмя: ${subscriber.employeeName}\nСмена: ${status}`);
+      return res.status(200).json({ ok: true });
+    }
+
+    if (text === '/отписаться' || text === '/stop') {
+      const subscriberIndex = subscribers.findIndex(item => item.chatId === chatId);
+      if (subscriberIndex === -1) {
+        await reply('⚠️ Вы ещё не зарегистрированы.');
+        return res.status(200).json({ ok: true });
+      }
+      subscribers.splice(subscriberIndex, 1);
+      await saveJson('subscribers.json', subscribers);
+      await reply('✅ Вы отписались от уведомлений.');
+      return res.status(200).json({ ok: true });
+    }
+
+    // Неизвестная команда
+    await reply('❓ Неизвестная команда. Отправьте /start для справки.');
     return res.status(200).json({ ok: true });
 
   } catch (error) {

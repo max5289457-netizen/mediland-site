@@ -14,8 +14,8 @@ function localFilePath(filename) {
 }
 
 export async function parseJsonBody(req) {
-  // Vercel может уже распарсить тело
-  if (req.body) {
+  // Vercel автоматически парсит JSON body
+  if (req.body && typeof req.body === 'object') {
     return req.body;
   }
 
