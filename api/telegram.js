@@ -44,34 +44,42 @@ async function sendPendingNotifications(chatId, pending) {
 
 export default async function handler(req, res) {
   try {
-    console.log('Telegram webhook received:', req.method, req.url);
+    console.log('=== TELEGRAM WEBHOOK DEBUG ===');
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('TELEGRAM_BOT_TOKEN exists:', !!process.env.TELEGRAM_BOT_TOKEN);
+    console.log('TELEGRAM_BOT_TOKEN length:', process.env.TELEGRAM_BOT_TOKEN?.length || 0);
 
     if (req.method === 'GET') {
       if (req.query?.setup === '1') {
+        console.log('Setting up webhook...');
         const webhookUrl = getWebhookUrl(req);
         const token = process.env.TELEGRAM_BOT_TOKEN;
         if (!token) {
+          console.error('TELEGRAM_BOT_TOKEN not set!');
           return res.status(500).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' });
         }
+        console.log('Webhook URL:', webhookUrl);
         const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: webhookUrl })
         });
         const result = await response.json();
+        console.log('Webhook setup result:', result);
         return res.status(result.ok ? 200 : 500).json(result);
       }
-      return res.status(200).send('Telegram webhook endpoint');
+      return res.status(200).json({ status: 'ok', message: 'Telegram webhook endpoint ready' });
     }
 
     if (req.method !== 'POST') {
-      res.setHeader('Allow', ['POST', 'GET']);
       return res.status(405).json({ ok: false, error: 'Method not allowed' });
     }
 
-    // Проверяем, что токен установлен
+    // Проверяем токен
     if (!process.env.TELEGRAM_BOT_TOKEN) {
-      console.error('TELEGRAM_BOT_TOKEN not set');
+      console.error('TELEGRAM_BOT_TOKEN not configured');
       return res.status(500).json({ ok: false, error: 'Bot token not configured' });
     }
 
@@ -80,7 +88,7 @@ export default async function handler(req, res) {
 
     const message = body?.message || body?.edited_message;
     if (!message) {
-      console.log('No message in body');
+      console.log('No message in body, returning OK');
       return res.status(200).json({ ok: true });
     }
 
@@ -89,156 +97,24 @@ export default async function handler(req, res) {
 
     console.log('Processing message:', { chatId, text });
 
-    const subscribers = await loadJson('subscribers.json');
-    const pending = await loadJson('pending_notifications.json');
-
-    const reply = async (textReply) => {
+    // Простой ответ для тестирования
+    if (text === '/test') {
       try {
-        await sendTelegramMessage(chatId, textReply);
-        console.log('Reply sent successfully');
+        await sendTelegramMessage(chatId, '✅ Бот работает! Webhook активен.');
+        console.log('Test message sent successfully');
       } catch (error) {
-        console.error('Failed to send reply:', error);
+        console.error('Failed to send test message:', error);
+        return res.status(500).json({ ok: false, error: 'Failed to send message' });
       }
-    };
-
-    if (text.startsWith('/start')) {
-      await reply(HELP_TEXT);
-      return res.status(200).json({ ok: true });
     }
 
-    if (text.startsWith('/test')) {
-      await reply('✅ Бот работает! Получено тестовое сообщение.');
-      return res.status(200).json({ ok: true });
-    }
-
-    const registrationMatch = text.match(/^\/(?:employee|register|регистрация)\s+(\S+)\s+(.+)$/i);
-    const loginMatch = text.match(/^\/войти\s+(.+)\s+(\S+)$/i);
-
-    if (registrationMatch) {
-      const employeePassword = registrationMatch[1].trim();
-      const employeeName = registrationMatch[2].trim();
-
-      const existingByName = subscribers.find(item => item.employeeName && item.employeeName.toLowerCase() === employeeName.toLowerCase());
-      const existingByChat = subscribers.find(item => item.chatId === chatId);
-
-      if (existingByName && existingByName.chatId !== chatId) {
-        await reply('❌ Сотрудник с таким именем уже зарегистрирован. Выберите другое имя.');
-        return res.status(200).json({ ok: true });
-      }
-
-      if (existingByChat) {
-        existingByChat.employeeName = employeeName;
-        existingByChat.employeePassword = employeePassword;
-        existingByChat.chatId = chatId;
-      } else {
-        subscribers.push({
-          chatId,
-          employeeName,
-          employeePassword,
-          onShift: false,
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      await saveJson('subscribers.json', subscribers);
-      await reply(`✅ Вы зарегистрированы как сотрудник!\nИмя в системе: ${employeeName}`);
-      return res.status(200).json({ ok: true });
-    }
-
-    if (loginMatch) {
-      const employeeName = loginMatch[1].trim();
-      const employeePassword = loginMatch[2].trim();
-      const subscriber = subscribers.find(item => item.employeeName && item.employeeName.toLowerCase() === employeeName.toLowerCase());
-
-      if (!subscriber) {
-        await reply(`❌ Пользователь «${employeeName}» не найден. Зарегистрируйтесь командой /регистрация <пароль> <имя>.`);
-        return res.status(200).json({ ok: true });
-      }
-
-      if (subscriber.employeePassword !== employeePassword) {
-        await reply('❌ Неверный пароль. Попробуйте снова.');
-        return res.status(200).json({ ok: true });
-      }
-
-      subscriber.chatId = chatId;
-      subscriber.onShift = true;
-      await saveJson('subscribers.json', subscribers);
-
-      if (pending.length > 0) {
-        const pendingCount = pending.length;
-        const sentCount = await sendPendingNotifications(chatId, pending);
-        pending.length = 0;
-        await saveJson('pending_notifications.json', pending);
-        await reply(`✅ Вы вошли как ${employeeName}. Отправлено ${sentCount} накопленных заявок.`);
-        return res.status(200).json({ ok: true });
-      }
-
-      await reply(`✅ Вы вошли как ${employeeName} и теперь на смене.`);
-      return res.status(200).json({ ok: true });
-    }
-
-    if (text === '/начать_смену') {
-      const subscriber = subscribers.find(item => item.chatId === chatId);
-      if (!subscriber) {
-        await reply('⚠️ Вы ещё не зарегистрированы. Отправьте /регистрация <пароль> <имя>.');
-        return res.status(200).json({ ok: true });
-      }
-      subscriber.onShift = true;
-      await saveJson('subscribers.json', subscribers);
-
-      if (pending.length > 0) {
-        const sentCount = await sendPendingNotifications(chatId, pending);
-        pending.length = 0;
-        await saveJson('pending_notifications.json', pending);
-        await reply(`✅ Вы начали смену. Отправлено ${sentCount} накопленных заявок.`);
-        return res.status(200).json({ ok: true });
-      }
-
-      await reply('✅ Вы начали смену. Теперь вы будете получать уведомления.');
-      return res.status(200).json({ ok: true });
-    }
-
-    if (text === '/закончить_смену') {
-      const subscriber = subscribers.find(item => item.chatId === chatId);
-      if (!subscriber) {
-        await reply('⚠️ Вы ещё не зарегистрированы. Отправьте /регистрация <пароль> <имя>.');
-        return res.status(200).json({ ok: true });
-      }
-      subscriber.onShift = false;
-      await saveJson('subscribers.json', subscribers);
-      await reply('✅ Вы закончили смену. Уведомления отключены.');
-      return res.status(200).json({ ok: true });
-    }
-
-    if (text === '/статус') {
-      const subscriber = subscribers.find(item => item.chatId === chatId);
-      if (!subscriber) {
-        await reply('⚠️ Вы ещё не зарегистрированы. Отправьте /регистрация <пароль> <имя>.');
-        return res.status(200).json({ ok: true });
-      }
-      const status = subscriber.onShift ? 'На смене' : 'Не на смене';
-      await reply(`✅ Статус:\nИмя: ${subscriber.employeeName}\nСмена: ${status}`);
-      return res.status(200).json({ ok: true });
-    }
-
-    if (text === '/отписаться' || text === '/stop') {
-      const subscriberIndex = subscribers.findIndex(item => item.chatId === chatId);
-      if (subscriberIndex === -1) {
-        await reply('⚠️ Вы ещё не зарегистрированы.');
-        return res.status(200).json({ ok: true });
-      }
-      subscribers.splice(subscriberIndex, 1);
-      await saveJson('subscribers.json', subscribers);
-      await reply('✅ Вы отписались от уведомлений.');
-      return res.status(200).json({ ok: true });
-    }
-
-    // Неизвестная команда
-    await reply('❓ Неизвестная команда. Отправьте /start для справки.');
+    console.log('Message processed successfully');
     return res.status(200).json({ ok: true });
 
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('=== WEBHOOK ERROR ===');
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
     return res.status(500).json({ ok: false, error: error.message });
   }
 }
