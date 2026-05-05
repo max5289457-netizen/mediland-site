@@ -29,5 +29,15 @@
     "employeePassword": "1234",
     "onShift": true,
     "createdAt": "2026-05-05T12:30:43.149Z"
+  },
+  {
+    "chatId": 888058377,
+    "firstName": "Наталья",
+    "lastName": "",
+    "username": "",
+    "employeeName": "Наташа",
+    "employeePassword": "1234",
+    "onShift": false,
+    "createdAt": "2026-05-05T12:53:05.522Z"
   }
 ]
