@@ -15,7 +15,7 @@ function normalizeText(text) {
   return String(text || '').trim();
 }
 
-export default function handler(req, res) {
+function handler(req, res) {
   console.log('=== TELEGRAM WEBHOOK ===');
   console.log('Method:', req.method);
 
@@ -37,6 +37,8 @@ export default function handler(req, res) {
   console.log('POST request received, returning OK');
   return res.status(200).json({ ok: true });
 }
+
+module.exports = handler;
     const remaining = subscribers.filter(item => item.chatId !== chatId);
     await saveJson('subscribers.json', remaining);
     await reply('✅ Вы удалены из списка сотрудников.');
