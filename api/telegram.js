@@ -54,13 +54,18 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       if (req.query?.setup === '1') {
         console.log('Setting up webhook...');
-        const webhookUrl = getWebhookUrl(req);
         const token = process.env.TELEGRAM_BOT_TOKEN;
         if (!token) {
           console.error('TELEGRAM_BOT_TOKEN not set!');
           return res.status(500).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' });
         }
+
+        const baseUrl = process.env.VERCEL_URL || 'mediland-site.vercel.app';
+        const webhookUrl = `https://${baseUrl}/api/telegram`;
+
         console.log('Webhook URL:', webhookUrl);
+        console.log('Token exists:', !!token);
+
         const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -83,8 +88,26 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: 'Bot token not configured' });
     }
 
-    const body = await parseJsonBody(req);
-    console.log('Parsed body:', JSON.stringify(body, null, 2));
+    console.log('Token is configured, parsing body...');
+
+    // Простой парсинг без utils
+    let body;
+    try {
+      if (req.body) {
+        body = req.body;
+      } else {
+        const chunks = [];
+        for await (const chunk of req) {
+          chunks.push(chunk);
+        }
+        const rawBody = Buffer.concat(chunks).toString('utf-8');
+        body = rawBody ? JSON.parse(rawBody) : {};
+      }
+      console.log('Body parsed successfully');
+    } catch (error) {
+      console.error('Failed to parse body:', error);
+      return res.status(400).json({ ok: false, error: 'Invalid JSON' });
+    }
 
     const message = body?.message || body?.edited_message;
     if (!message) {
@@ -100,11 +123,25 @@ export default async function handler(req, res) {
     // Простой ответ для тестирования
     if (text === '/test') {
       try {
-        await sendTelegramMessage(chatId, '✅ Бот работает! Webhook активен.');
-        console.log('Test message sent successfully');
+        console.log('Sending test message...');
+        const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: '✅ Бот работает! Webhook активен.',
+            parse_mode: 'HTML'
+          })
+        });
+        const result = await response.json();
+        console.log('Test message result:', result);
+        if (!result.ok) {
+          console.error('Telegram API error:', result);
+          return res.status(500).json({ ok: false, error: 'Failed to send message' });
+        }
       } catch (error) {
         console.error('Failed to send test message:', error);
-        return res.status(500).json({ ok: false, error: 'Failed to send message' });
+        return res.status(500).json({ ok: false, error: 'Network error' });
       }
     }
 
