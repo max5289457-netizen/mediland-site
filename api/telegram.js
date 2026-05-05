@@ -17,27 +17,26 @@ function normalizeText(text) {
 
 export default async function handler(req, res) {
   try {
-    console.log('=== TELEGRAM WEBHOOK DEBUG ===');
+    console.log('=== TELEGRAM WEBHOOK ===');
     console.log('Method:', req.method);
     console.log('URL:', req.url);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
-    console.log('TELEGRAM_BOT_TOKEN exists:', !!process.env.TELEGRAM_BOT_TOKEN);
-    console.log('TELEGRAM_BOT_TOKEN length:', process.env.TELEGRAM_BOT_TOKEN?.length || 0);
+
+    // Проверяем токен сразу
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) {
+      console.error('TELEGRAM_BOT_TOKEN not set!');
+      return res.status(500).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' });
+    }
+    console.log('Token OK, length:', token.length);
 
     if (req.method === 'GET') {
       if (req.query?.setup === '1') {
         console.log('Setting up webhook...');
-        const token = process.env.TELEGRAM_BOT_TOKEN;
-        if (!token) {
-          console.error('TELEGRAM_BOT_TOKEN not set!');
-          return res.status(500).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not set' });
-        }
 
         const baseUrl = process.env.VERCEL_URL || 'mediland-site.vercel.app';
         const webhookUrl = `https://${baseUrl}/api/telegram`;
 
         console.log('Webhook URL:', webhookUrl);
-        console.log('Token exists:', !!token);
 
         const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
           method: 'POST',
@@ -48,82 +47,72 @@ export default async function handler(req, res) {
         console.log('Webhook setup result:', result);
         return res.status(result.ok ? 200 : 500).json(result);
       }
-      return res.status(200).json({ status: 'ok', message: 'Telegram webhook endpoint ready' });
+      return res.status(200).json({ status: 'ok', message: 'Telegram webhook ready' });
     }
 
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Method not allowed' });
     }
 
-    // Проверяем токен
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
-      console.error('TELEGRAM_BOT_TOKEN not configured');
-      return res.status(500).json({ ok: false, error: 'Bot token not configured' });
-    }
+    console.log('Processing POST request...');
 
-    console.log('Token is configured, parsing body...');
-
-    // Простой парсинг без utils
+    // Парсим тело
     let body;
     try {
       if (req.body) {
         body = req.body;
+        console.log('Using req.body');
       } else {
+        console.log('Reading from stream...');
         const chunks = [];
         for await (const chunk of req) {
           chunks.push(chunk);
         }
         const rawBody = Buffer.concat(chunks).toString('utf-8');
         body = rawBody ? JSON.parse(rawBody) : {};
+        console.log('Parsed from stream');
       }
-      console.log('Body parsed successfully');
     } catch (error) {
-      console.error('Failed to parse body:', error);
+      console.error('Parse error:', error.message);
       return res.status(400).json({ ok: false, error: 'Invalid JSON' });
     }
 
     const message = body?.message || body?.edited_message;
     if (!message) {
-      console.log('No message in body, returning OK');
+      console.log('No message, returning OK');
       return res.status(200).json({ ok: true });
     }
 
-    const chatId = message.chat.id;
+    const chatId = message.chat?.id;
     const text = normalizeText(message.text || '');
 
-    console.log('Processing message:', { chatId, text });
+    console.log('Message:', { chatId, text });
 
-    // Простой ответ для тестирования
     if (text === '/test') {
-      try {
-        console.log('Sending test message...');
-        const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: '✅ Бот работает! Webhook активен.',
-            parse_mode: 'HTML'
-          })
-        });
-        const result = await response.json();
-        console.log('Test message result:', result);
-        if (!result.ok) {
-          console.error('Telegram API error:', result);
-          return res.status(500).json({ ok: false, error: 'Failed to send message' });
-        }
-      } catch (error) {
-        console.error('Failed to send test message:', error);
-        return res.status(500).json({ ok: false, error: 'Network error' });
+      console.log('Sending test message...');
+      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: '✅ Бот работает! Webhook активен.',
+          parse_mode: 'HTML'
+        })
+      });
+      const result = await response.json();
+      console.log('Send result:', result);
+      if (!result.ok) {
+        console.error('Telegram error:', result);
+        return res.status(500).json({ ok: false, error: 'Telegram API error' });
       }
     }
 
-    console.log('Message processed successfully');
+    console.log('Request processed successfully');
     return res.status(200).json({ ok: true });
 
   } catch (error) {
-    console.error('=== WEBHOOK ERROR ===');
-    console.error('Error:', error);
+    console.error('=== ERROR ===');
+    console.error('Message:', error.message);
     console.error('Stack:', error.stack);
     return res.status(500).json({ ok: false, error: error.message });
   }
