@@ -149,7 +149,7 @@ export async function loadJson(filename) {
       return data;
     } catch (error) {
       console.error(`  ❌ Error loading ${filename} from GitHub:`, error.message);
-      return [];
+      throw error;
     }
   }
 
