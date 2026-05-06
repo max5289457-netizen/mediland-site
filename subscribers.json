@@ -14,10 +14,30 @@
     "createdAt": "2026-05-02T20:11:12.662Z"
   },
   {
-    "chatId": 763637481,
-    "employeeName": "Макс",
+    "chatId": 302113289,
+    "employeeName": "Настя",
     "employeePassword": "1234",
     "onShift": true,
-    "createdAt": "2026-05-02T20:37:03.830Z"
+    "createdAt": "2026-05-03T13:04:23.725Z"
+  },
+  {
+    "chatId": 763637481,
+    "firstName": "МАКС",
+    "lastName": "",
+    "username": "vodmaks",
+    "employeeName": "Макс",
+    "employeePassword": "1234",
+    "onShift": false,
+    "createdAt": "2026-05-05T12:30:43.149Z"
+  },
+  {
+    "chatId": 888058377,
+    "firstName": "Наталья",
+    "lastName": "",
+    "username": "",
+    "employeeName": "Наташа",
+    "employeePassword": "1234",
+    "onShift": true,
+    "createdAt": "2026-05-05T12:53:05.522Z"
   }
 ]

@@ -13,10 +13,12 @@ function localFilePath(filename) {
 }
 
 export async function parseJsonBody(req) {
-  if (req.body) {
+  // Vercel автоматически парсит JSON body
+  if (req.body && typeof req.body === 'object') {
     return req.body;
   }
 
+  // Для других сред читаем поток
   const chunks = [];
   for await (const chunk of req) {
     chunks.push(chunk);
@@ -60,7 +62,7 @@ export async function parseFormData(req) {
             fieldname,
             buffer: Buffer.concat(chunks),
             filename: info.filename,
-            mimetype: info.encoding
+            mimetype: info.mimeType || info.mimetype || 'application/octet-stream'
           });
         });
       });
@@ -159,8 +161,10 @@ export async function saveJson(filename, data) {
     return await response.json();
   }
 
+  // Для Vercel без GitHub storage используем временное хранение в памяти
   if (process.env.VERCEL) {
-    throw new Error('Persistent storage on Vercel requires GITHUB_TOKEN and repo info.');
+    console.warn(`Vercel detected but GitHub storage disabled. ${filename} changes will not persist.`);
+    return { ok: true };
   }
 
   fs.writeFileSync(localFilePath(filename), JSON.stringify(data, null, 2), 'utf-8');
@@ -236,7 +240,8 @@ export function buildNotificationMessage(data) {
   if (data.branch) text += `<b>🏢 Филиал:</b> ${escapeHtml(data.branch)}\n`;
   if (data.rehabType) text += `<b>🏥 Тип реабилитации:</b> ${escapeHtml(data.rehabType)}\n`;
   if (data.message) text += `\n<b>📝 Сообщение:</b>\n${escapeHtml(data.message)}\n`;
-  if (data.photosCount != null) text += `<b>📎 Фото:</b> ${escapeHtml(data.photosCount)} шт.\n`;
+  const photoCount = Number(data.photosCount || (Array.isArray(data.files) ? data.files.length : 0));
+  if (photoCount > 0) text += `<b>📎 Фото:</b> ${escapeHtml(photoCount)} шт.\n`;
   text += `\n<b>⏰ Время:</b> ${new Date().toLocaleString('ru-RU')}`;
   return text;
 }
