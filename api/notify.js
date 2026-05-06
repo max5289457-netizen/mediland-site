@@ -48,9 +48,18 @@ export default async function handler(req, res) {
           return { chatId: subscriber.chatId, ok: true };
         } catch (error) {
           console.error(`  ❌ Ошибка отправки ${subscriber.employeeName}:`, error.message);
+          if (String(error.message).includes('bot was blocked by the user') || String(error.message).includes('Forbidden')) {
+            subscriber.onShift = false;
+          }
           return { chatId: subscriber.chatId, ok: false, error: error.message };
         }
       }));
+
+      const blockedCount = onShift.filter(sub => !sub.onShift).length;
+      if (blockedCount > 0) {
+        await saveJson('subscribers.json', subscribers);
+        console.log(`⚠️ Снято с смены ${blockedCount} заблокированных пользователя(ей)`);
+      }
 
       const successCount = results.filter(r => r.ok).length;
       console.log(`✅ Заявка обработана: успешно ${successCount} из ${onShift.length} сотрудников`);

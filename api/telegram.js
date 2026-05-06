@@ -118,7 +118,7 @@ async function sendPendingNotifications(chatId, pending) {
             await sendTelegramPhoto(chatId, photo.buffer, photo.filename);
           } catch (photoError) {
             console.error(`❌ Ошибка отправки фото ${file.filename}:`, photoError.message);
-            throw photoError; // Пробросим ошибку, чтобы уведомление осталось в очереди
+            throw photoError;
           }
         }
       }
@@ -126,6 +126,9 @@ async function sendPendingNotifications(chatId, pending) {
       console.log(`✅ Уведомление ${i + 1} успешно отправлено`);
     } catch (error) {
       console.error(`❌ Ошибка отправки уведомления ${i + 1}:`, error.message);
+      if (String(error.message).includes('bot was blocked by the user') || String(error.message).includes('Forbidden')) {
+        await disableBlockedSubscriber(chatId);
+      }
       failedNotifications.push(notification);
     }
   }
@@ -164,6 +167,20 @@ async function setShiftStatus(chatId, onShift) {
   subscriber.onShift = onShift;
   await saveSubscribers(list);
   return { ok: true, subscriber };
+}
+
+async function disableBlockedSubscriber(chatId) {
+  const list = await loadSubscribers();
+  const subscriber = findSubscriberByChatId(list, chatId);
+  if (!subscriber) {
+    return false;
+  }
+  if (subscriber.onShift) {
+    subscriber.onShift = false;
+  }
+  await saveSubscribers(list);
+  console.log(`🔒 Пользователь ${subscriber.employeeName || chatId} помечен как не на смене после блокировки бота`);
+  return true;
 }
 
 async function handleCommand(message) {
