@@ -37,7 +37,7 @@
     "username": "",
     "employeeName": "Наташа",
     "employeePassword": "1234",
-    "onShift": true,
+    "onShift": false,
     "createdAt": "2026-05-05T12:53:05.522Z"
   }
 ]
