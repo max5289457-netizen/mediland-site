@@ -101,31 +101,58 @@ function deserializePendingPhoto(photo) {
 }
 
 async function sendPendingNotifications(chatId, pending) {
-  for (const notification of pending) {
-    await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
-    if (Array.isArray(notification.files) && notification.files.length > 0) {
-      for (const file of notification.files) {
-        const photo = deserializePendingPhoto(file);
-        await sendTelegramPhoto(chatId, photo.buffer, photo.filename);
+  let sentCount = 0;
+  const failedNotifications = [];
+
+  for (let i = 0; i < pending.length; i++) {
+    const notification = pending[i];
+    try {
+      console.log(`📨 Отправка очередного уведомления ${i + 1} из ${pending.length} при входе на смену`);
+      await sendTelegramMessage(chatId, notification.message, { skipEscape: true });
+      
+      if (Array.isArray(notification.files) && notification.files.length > 0) {
+        console.log(`📷 Отправка ${notification.files.length} фото к уведомлению ${i + 1}`);
+        for (const file of notification.files) {
+          try {
+            const photo = deserializePendingPhoto(file);
+            await sendTelegramPhoto(chatId, photo.buffer, photo.filename);
+          } catch (photoError) {
+            console.error(`❌ Ошибка отправки фото ${file.filename}:`, photoError.message);
+            throw photoError; // Пробросим ошибку, чтобы уведомление осталось в очереди
+          }
+        }
       }
+      sentCount++;
+      console.log(`✅ Уведомление ${i + 1} успешно отправлено`);
+    } catch (error) {
+      console.error(`❌ Ошибка отправки уведомления ${i + 1}:`, error.message);
+      failedNotifications.push(notification);
     }
   }
+
+  return { sentCount, failedNotifications };
 }
 
 async function deliverPendingNotifications(chatId) {
   const pending = await loadPendingNotifications();
   if (!Array.isArray(pending) || pending.length === 0) {
+    console.log('📋 Очередь пуста, нечего отправлять');
     return 0;
   }
 
-  try {
-    await sendPendingNotifications(chatId, pending);
+  console.log(`📦 Начинаю отправку ${pending.length} накопленных уведомлений`);
+  const result = await sendPendingNotifications(chatId, pending);
+
+  // Сохраняем только те уведомления, которые не были отправлены
+  if (result.failedNotifications.length > 0) {
+    console.log(`⚠️ Не удалось отправить ${result.failedNotifications.length} уведомлений, сохраняю в очередь`);
+    await savePendingNotifications(result.failedNotifications);
+  } else {
+    console.log(`✅ Все ${result.sentCount} уведомлений успешно отправлены, очередь очищена`);
     await savePendingNotifications([]);
-    return pending.length;
-  } catch (error) {
-    console.error('Failed to deliver pending notifications:', error);
-    return 0;
   }
+
+  return result.sentCount;
 }
 
 async function setShiftStatus(chatId, onShift) {
