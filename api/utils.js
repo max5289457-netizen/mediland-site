@@ -8,6 +8,16 @@ const GITHUB_OWNER = process.env.VERCEL_GIT_REPO_OWNER || process.env.GITHUB_OWN
 const GITHUB_REPO = process.env.VERCEL_GIT_REPO_SLUG || process.env.GITHUB_REPO;
 const useGitHubStorage = Boolean(GITHUB_TOKEN && GITHUB_OWNER && GITHUB_REPO);
 
+// Логирование при инициализации
+if (process.env.VERCEL) {
+  console.log('🔧 Vercel environment detected');
+  console.log('  TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? '✅ SET' : '❌ NOT SET');
+  console.log('  GITHUB_TOKEN:', GITHUB_TOKEN ? '✅ SET' : '❌ NOT SET');
+  console.log('  GITHUB_OWNER:', GITHUB_OWNER || '❌ NOT SET');
+  console.log('  GITHUB_REPO:', GITHUB_REPO || '❌ NOT SET');
+  console.log('  Storage type:', useGitHubStorage ? '📁 GitHub (persistent)' : '⚠️ Memory only (NOT persistent!)');
+}
+
 function localFilePath(filename) {
   return path.resolve(process.cwd(), filename);
 }
@@ -126,48 +136,76 @@ async function getGitHubFileInfo(filename) {
 
 export async function loadJson(filename) {
   if (useGitHubStorage) {
-    const info = await getGitHubFileInfo(filename);
-    if (!info || !info.content) {
+    try {
+      console.log(`📥 Loading ${filename} from GitHub...`);
+      const info = await getGitHubFileInfo(filename);
+      if (!info || !info.content) {
+        console.log(`  ⚠️ ${filename} not found in GitHub, returning empty array`);
+        return [];
+      }
+      const content = Buffer.from(info.content, 'base64').toString('utf-8');
+      const data = JSON.parse(content || '[]');
+      console.log(`  ✅ Loaded ${filename}: ${Array.isArray(data) ? data.length + ' items' : 'object'}`);
+      return data;
+    } catch (error) {
+      console.error(`  ❌ Error loading ${filename} from GitHub:`, error.message);
       return [];
     }
-    const content = Buffer.from(info.content, 'base64').toString('utf-8');
-    return JSON.parse(content || '[]');
   }
 
+  // Fallback для локального FS (для разработки)
   try {
+    console.log(`📥 Loading ${filename} from local filesystem...`);
     const raw = fs.readFileSync(localFilePath(filename), 'utf-8');
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    console.log(`  ✅ Loaded ${filename}: ${Array.isArray(data) ? data.length + ' items' : 'object'}`);
+    return data;
   } catch (error) {
+    console.log(`  ℹ️ ${filename} not found locally, returning empty array`);
     return [];
   }
 }
 
 export async function saveJson(filename, data) {
   if (useGitHubStorage) {
-    const info = await getGitHubFileInfo(filename);
-    const body = {
-      message: `Update ${filename} via Telegram bot`,
-      content: Buffer.from(JSON.stringify(data, null, 2)).toString('base64')
-    };
-    if (info?.sha) {
-      body.sha = info.sha;
+    try {
+      console.log(`📤 Saving ${filename} to GitHub...`);
+      const info = await getGitHubFileInfo(filename);
+      const body = {
+        message: `Update ${filename} via Telegram bot`,
+        content: Buffer.from(JSON.stringify(data, null, 2)).toString('base64')
+      };
+      if (info?.sha) {
+        body.sha = info.sha;
+      }
+      const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeURIComponent(filename)}`;
+      const response = await githubRequest(url, { method: 'PUT', body: JSON.stringify(body) });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`GitHub update error (${response.status}): ${errorText}`);
+      }
+      console.log(`  ✅ Successfully saved ${filename} to GitHub (${data.length || 'N/A'} items)`);
+      return await response.json();
+    } catch (error) {
+      console.error(`  ❌ Error saving ${filename} to GitHub:`, error.message);
+      throw error;
     }
-    const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${encodeURIComponent(filename)}`;
-    const response = await githubRequest(url, { method: 'PUT', body: JSON.stringify(body) });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`GitHub update error (${response.status}): ${errorText}`);
-    }
-    return await response.json();
   }
 
-  // Для Vercel без GitHub storage используем временное хранение в памяти
+  // Fallback для локального FS (для разработки)
   if (process.env.VERCEL) {
-    console.warn(`Vercel detected but GitHub storage disabled. ${filename} changes will not persist.`);
-    return { ok: true };
+    console.error(`❌ CRITICAL: Vercel detected but GitHub storage is disabled!`);
+    console.error(`❌ Data will NOT be saved! Check environment variables:`);
+    console.error(`   - GITHUB_TOKEN: ${GITHUB_TOKEN ? 'SET' : 'NOT SET'}`);
+    console.error(`   - GITHUB_OWNER: ${GITHUB_OWNER || 'NOT SET'}`);
+    console.error(`   - GITHUB_REPO: ${GITHUB_REPO || 'NOT SET'}`);
+    throw new Error('GitHub storage is required on Vercel');
   }
 
+  // Для локальной разработки
+  console.log(`📤 Saving ${filename} to local filesystem...`);
   fs.writeFileSync(localFilePath(filename), JSON.stringify(data, null, 2), 'utf-8');
+  console.log(`  ✅ Successfully saved ${filename} locally`);
   return { ok: true };
 }
 
