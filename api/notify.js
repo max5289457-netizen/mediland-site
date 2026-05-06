@@ -8,6 +8,11 @@ function serializePendingFiles(files) {
   }));
 }
 
+function isBlockedError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('bot was blocked by the user') || message.includes('forbidden');
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -48,10 +53,10 @@ export default async function handler(req, res) {
           return { chatId: subscriber.chatId, ok: true };
         } catch (error) {
           console.error(`  ❌ Ошибка отправки ${subscriber.employeeName}:`, error.message);
-          if (String(error.message).includes('bot was blocked by the user') || String(error.message).includes('Forbidden')) {
+          if (isBlockedError(error)) {
             subscriber.onShift = false;
           }
-          return { chatId: subscriber.chatId, ok: false, error: error.message };
+          return { chatId: subscriber.chatId, ok: false, error: error.message, blocked: isBlockedError(error) };
         }
       }));
 
@@ -62,8 +67,25 @@ export default async function handler(req, res) {
       }
 
       const successCount = results.filter(r => r.ok).length;
-      console.log(`✅ Заявка обработана: успешно ${successCount} из ${onShift.length} сотрудников`);
-      return res.status(200).json({ ok: true, sent: successCount, total: onShift.length, results });
+      const blockedResults = results.filter(r => r.blocked).length;
+      const failedResults = results.length - successCount;
+
+      if (successCount === 0) {
+        console.log('⚠️ Все попытки отправки не удались. Сохраняю заявку в очередь.');
+        const pending = await loadJson('pending_notifications.json');
+        pending.push({
+          message: messageText,
+          files: serializePendingFiles(data.files),
+          photosCount: data.photosCount || 0,
+          timestamp: new Date().toISOString()
+        });
+        await saveJson('pending_notifications.json', pending);
+        console.log(`📋 Очередь уведомлений: ${pending.length} заявок`);
+        return res.status(200).json({ ok: true, queued: true, message: 'Никто не смог принять заявку. Она сохранена в очередь.', results, blocked: blockedResults });
+      }
+
+      console.log(`✅ Заявка обработана: успешно ${successCount} из ${onShift.length} сотрудников, ${failedResults} неудач.`);
+      return res.status(200).json({ ok: true, sent: successCount, total: onShift.length, results, blocked: blockedResults });
     }
 
     // Сохранение в очередь если никого нет на смене
