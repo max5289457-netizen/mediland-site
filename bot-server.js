@@ -142,9 +142,11 @@ async function sendPhotos(chatId, photos) {
       const photo = photos[0];
       const source = buildPhotoSource(photo, tempFiles);
       await bot.sendPhoto(chatId, source, { caption: '📷 Фото пациента' });
+      console.log(`    ✅ Одиночное фото отправлено (${photo.filename})`);
       return;
     }
 
+    console.log(`    📤 Отправляю группу из ${photos.length} фото...`);
     const media = photos.map((photo) => ({
       type: 'photo',
       media: buildPhotoSource(photo, tempFiles),
@@ -152,6 +154,10 @@ async function sendPhotos(chatId, photos) {
     }));
 
     await bot.sendMediaGroup(chatId, media);
+    console.log(`    ✅ Группа фото отправлена (${photos.length} шт.)`);
+  } catch (error) {
+    console.error(`    ❌ Ошибка отправки фото:`, error.message);
+    throw error;
   } finally {
     cleanupTempFiles(tempFiles);
   }
@@ -294,18 +300,36 @@ bot.onText(/\/войти(?:\s+(\S+))?(?:\s+(\S+))?/, async (msg, match) => {
 
   const pending = loadPendingNotifications();
   if (pending.length > 0) {
-    for (const notification of pending) {
+    let sentCount = 0;
+    const failedNotifications = [];
+    
+    for (let i = 0; i < pending.length; i++) {
+      const notification = pending[i];
       try {
+        console.log(`Отправка очередного уведомления ${i + 1} из ${pending.length} при входе ${employeeName}`);
         await bot.sendMessage(chatId, notification.message, { parse_mode: 'HTML' });
+        
         if (notification.photos && notification.photos.length > 0) {
+          console.log(`Отправка ${notification.photos.length} фото к уведомлению ${i + 1}`);
           await sendPhotos(chatId, notification.photos);
         }
+        sentCount++;
+        console.log(`✅ Уведомление ${i + 1} успешно отправлено`);
       } catch (error) {
-        console.error('Ошибка отправки pending notification:', error);
+        console.error(`❌ Ошибка отправки уведомления ${i + 1}:`, error.message);
+        failedNotifications.push(notification);
       }
     }
-    savePendingNotifications([]);
-    await bot.sendMessage(chatId, `✅ Вы вошли в систему как ${employeeName}. Отправлено ${pending.length} накопленных заявок.`, buildBotKeyboard());
+    
+    // Сохраняем только те уведомления, которые не были отправлены
+    if (failedNotifications.length > 0) {
+      console.log(`Сохраняю ${failedNotifications.length} неудачных уведомлений в очередь`);
+      savePendingNotifications(failedNotifications);
+    } else {
+      savePendingNotifications([]);
+    }
+    
+    await bot.sendMessage(chatId, `✅ Вы вошли в систему как ${employeeName}. Отправлено ${sentCount} из ${pending.length} накопленных заявок.`, buildBotKeyboard());
   } else {
     await bot.sendMessage(chatId, `✅ Вы вошли в систему как ${employeeName}. Теперь вы на смене и будете получать заявки.`, buildBotKeyboard());
   }
@@ -344,18 +368,36 @@ bot.onText(/\/начать_смену/, async (msg) => {
 
   const pending = loadPendingNotifications();
   if (pending.length > 0) {
-    for (const notification of pending) {
+    let sentCount = 0;
+    const failedNotifications = [];
+    
+    for (let i = 0; i < pending.length; i++) {
+      const notification = pending[i];
       try {
+        console.log(`Отправка очередного уведомления ${i + 1} из ${pending.length} сотруднику ${chatId}`);
         await bot.sendMessage(chatId, notification.message, { parse_mode: 'HTML' });
+        
         if (notification.photos && notification.photos.length > 0) {
+          console.log(`Отправка ${notification.photos.length} фото к уведомлению ${i + 1}`);
           await sendPhotos(chatId, notification.photos);
         }
+        sentCount++;
+        console.log(`✅ Уведомление ${i + 1} успешно отправлено`);
       } catch (error) {
-        console.error('Ошибка отправки pending notification:', error);
+        console.error(`❌ Ошибка отправки уведомления ${i + 1}:`, error.message);
+        failedNotifications.push(notification);
       }
     }
-    savePendingNotifications([]);
-    await bot.sendMessage(chatId, `✅ Вы начали смену. Отправлено ${pending.length} накопленных заявок.`, buildBotKeyboard());
+    
+    // Сохраняем только те уведомления, которые не были отправлены
+    if (failedNotifications.length > 0) {
+      console.log(`Сохраняю ${failedNotifications.length} неудачных уведомлений в очередь`);
+      savePendingNotifications(failedNotifications);
+    } else {
+      savePendingNotifications([]);
+    }
+    
+    await bot.sendMessage(chatId, `✅ Вы начали смену. Отправлено ${sentCount} из ${pending.length} накопленных заявок.`, buildBotKeyboard());
   } else {
     await bot.sendMessage(chatId, '✅ Вы начали смену. Теперь вы будете получать уведомления о новых заявках.', buildBotKeyboard());
   }
@@ -413,25 +455,34 @@ app.post('/notify', async (req, res) => {
     const messageText = buildNotificationMessage(fields);
 
     if (subscribers.length > 0) {
+      console.log(`📨 Поступила новая заявка. Отправка ${subscribers.length} сотруднику(лицам) на смене`);
       const results = await Promise.all(subscribers.map(async (subscriber) => {
         try {
+          console.log(`  📤 Отправляю уведомление сотруднику ${subscriber.employeeName} (chatId: ${subscriber.chatId})`);
           await bot.sendMessage(subscriber.chatId, messageText, { parse_mode: 'HTML' });
           if (photos.length > 0) {
+            console.log(`  📷 Отправляю ${photos.length} фото сотруднику ${subscriber.employeeName}`);
             const pendingPhotos = savePendingPhotos(photos);
             await sendPhotos(subscriber.chatId, pendingPhotos);
           }
+          console.log(`  ✅ Уведомление успешно отправлено ${subscriber.employeeName}`);
           return { chatId: subscriber.chatId, ok: true };
         } catch (error) {
+          console.error(`  ❌ Ошибка отправки ${subscriber.employeeName}:`, error.message);
           return { chatId: subscriber.chatId, ok: false, error: error.message };
         }
       }));
 
       const successCount = results.filter(r => r.ok).length;
+      console.log(`✅ Заявка обработана: успешно отправлено ${successCount} из ${subscribers.length} сотрудников`);
       res.json({ ok: true, sent: successCount, total: subscribers.length, results });
     } else {
+      console.log('📦 Нет сотрудников на смене. Сохраняю заявку в очередь');
       const pending = loadPendingNotifications();
-      pending.push({ message: messageText, timestamp: new Date().toISOString(), photos: savePendingPhotos(photos) });
+      const photoData = savePendingPhotos(photos);
+      pending.push({ message: messageText, timestamp: new Date().toISOString(), photos: photoData });
       savePendingNotifications(pending);
+      console.log(`📋 Очередь уведомлений: ${pending.length} заявок`);
       res.json({ ok: true, queued: true, message: 'Заявка сохранена в очередь. Будет отправлена сотруднику при начале смены.' });
     }
 
