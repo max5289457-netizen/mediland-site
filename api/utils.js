@@ -254,55 +254,29 @@ export async function sendTelegramPhoto(chatId, photoBuffer, filename = 'photo.j
     throw new Error('Photo buffer is empty');
   }
 
-  try {
-    // Используем встроенный FormData для Node.js 18+
-    const { FormData: NodeFormData } = await import('formdata-node');
-    const { File } = await import('formdata-node/file');
-    
-    const form = new NodeFormData();
-    form.set('chat_id', String(chatId));
-    form.set('photo', new File([photoBuffer], filename, { type: 'image/jpeg' }));
+  // Используем встроенный FormData для Vercel/Node.js
+  const form = new FormData();
+  
+  // Конвертируем Buffer в Blob
+  const blob = new Blob([photoBuffer], { type: 'image/jpeg' });
+  form.append('chat_id', String(chatId));
+  form.append('photo', blob, filename);
 
-    console.log(`  📤 Отправка фото на Telegram (chatId: ${chatId}, файл: ${filename}, размер: ${photoBuffer.length} bytes)`);
-    
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-      method: 'POST',
-      body: form
-    });
+  console.log(`  📤 Отправка фото на Telegram (chatId: ${chatId}, файл: ${filename}, размер: ${photoBuffer.length} bytes)`);
+  
+  const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+    method: 'POST',
+    body: form
+  });
 
-    const result = await response.json();
-    if (!result.ok) {
-      console.error(`  ❌ Telegram API ошибка при отправке фото: ${result.description}`);
-      throw new Error(result.description || 'Telegram sendPhoto failed');
-    }
-
-    console.log(`  ✅ Фото успешно отправлено на Telegram`);
-    return result;
-  } catch (err) {
-    // Fallback если formdata-node недоступен - используем встроенный FormData
-    if (err.code === 'ERR_MODULE_NOT_FOUND' || err.message.includes('Cannot find')) {
-      const form = new FormData();
-      form.append('chat_id', chatId);
-      form.append('photo', photoBuffer, filename);
-
-      console.log(`  📤 Отправка фото на Telegram через встроенный FormData (chatId: ${chatId}, файл: ${filename}, размер: ${photoBuffer.length} bytes)`);
-      
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-        method: 'POST',
-        body: form
-      });
-
-      const result = await response.json();
-      if (!result.ok) {
-        console.error(`  ❌ Telegram API ошибка при отправке фото: ${result.description}`);
-        throw new Error(result.description || 'Telegram sendPhoto failed');
-      }
-
-      console.log(`  ✅ Фото успешно отправлено на Telegram`);
-      return result;
-    }
-    throw err;
+  const result = await response.json();
+  if (!result.ok) {
+    console.error(`  ❌ Telegram API ошибка при отправке фото: ${result.description}`);
+    throw new Error(result.description || 'Telegram sendPhoto failed');
   }
+
+  console.log(`  ✅ Фото успешно отправлено на Telegram`);
+  return result;
 }
 
 export function buildNotificationMessage(data) {
