@@ -26,6 +26,12 @@ export default async function handler(req, res) {
 
     if (Array.isArray(data.files)) {
       data.photosCount = data.files.length;
+      console.log(`📸 Получено ${data.files.length} фото(графий) с заявкой`);
+      data.files.forEach((file, idx) => {
+        console.log(`   [${idx + 1}] ${file.filename} (${file.buffer?.length || 0} bytes, ${file.mimetype})`);
+      });
+    } else {
+      console.log(`📋 Заявка без фото`);
     }
 
     const messageText = buildNotificationMessage(data);
@@ -42,9 +48,11 @@ export default async function handler(req, res) {
             console.log(`  📷 Отправляю ${data.files.length} фото ${subscriber.employeeName}`);
             for (const file of data.files) {
               try {
+                console.log(`    → ${file.filename} (${file.buffer?.length || 0} bytes)`);
                 await sendTelegramPhoto(subscriber.chatId, file.buffer, file.filename);
+                console.log(`    ✅ ${file.filename} отправлено`);
               } catch (photoError) {
-                console.error(`  ❌ Ошибка фото ${file.filename} для ${subscriber.employeeName}:`, photoError.message);
+                console.error(`    ❌ Ошибка фото ${file.filename}:`, photoError.message);
                 throw photoError;
               }
             }

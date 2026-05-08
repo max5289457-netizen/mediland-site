@@ -250,12 +250,17 @@ export async function sendTelegramPhoto(chatId, photoBuffer, filename = 'photo.j
   if (!chatId) {
     throw new Error('Telegram chatId is missing');
   }
+  if (!photoBuffer || photoBuffer.length === 0) {
+    throw new Error('Photo buffer is empty');
+  }
 
   const FormData = (await import('form-data')).default;
   const form = new FormData();
   form.append('chat_id', chatId);
   form.append('photo', photoBuffer, filename);
 
+  console.log(`  📤 Отправка фото на Telegram (chatId: ${chatId}, файл: ${filename}, размер: ${photoBuffer.length} bytes)`);
+  
   const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
     method: 'POST',
     body: form
@@ -263,9 +268,11 @@ export async function sendTelegramPhoto(chatId, photoBuffer, filename = 'photo.j
 
   const result = await response.json();
   if (!result.ok) {
+    console.error(`  ❌ Telegram API ошибка при отправке фото: ${result.description}`);
     throw new Error(result.description || 'Telegram sendPhoto failed');
   }
 
+  console.log(`  ✅ Фото успешно отправлено на Telegram`);
   return result;
 }
 

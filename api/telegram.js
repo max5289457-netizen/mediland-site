@@ -115,9 +115,11 @@ async function sendPendingNotifications(chatId, pending) {
         for (const file of notification.files) {
           try {
             const photo = deserializePendingPhoto(file);
+            console.log(`   → ${photo.filename} (${photo.buffer?.length || 0} bytes)`);
             await sendTelegramPhoto(chatId, photo.buffer, photo.filename);
+            console.log(`   ✅ ${photo.filename} отправлено`);
           } catch (photoError) {
-            console.error(`❌ Ошибка отправки фото ${file.filename}:`, photoError.message);
+            console.error(`   ❌ Ошибка отправки фото ${file.filename}:`, photoError.message);
             throw photoError;
           }
         }
