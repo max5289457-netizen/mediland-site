@@ -3,21 +3,21 @@
     "chatId": 499201139,
     "employeeName": "Саша",
     "employeePassword": "1234",
-    "onShift": true,
+    "onShift": false,
     "createdAt": "2026-05-02T20:10:38.166Z"
   },
   {
     "chatId": 6459834298,
     "employeeName": "Ева",
     "employeePassword": "1234",
-    "onShift": true,
+    "onShift": false,
     "createdAt": "2026-05-02T20:11:12.662Z"
   },
   {
     "chatId": 302113289,
     "employeeName": "Настя",
     "employeePassword": "1234",
-    "onShift": true,
+    "onShift": false,
     "createdAt": "2026-05-03T13:04:23.725Z"
   },
   {
